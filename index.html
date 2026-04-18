@@ -219,6 +219,45 @@
       color: #fff;
       flex-shrink: 0;
     }
+
+
+    .avatar {
+        position: relative;
+        transition: box-shadow 0.15s, transform 0.15s;
+      }
+      .avatar.speaking {
+        box-shadow: 0 0 0 3px #10b981, 0 0 20px rgba(16,185,129,0.6);
+        transform: scale(1.08);
+      }
+      .speak-wave {
+        position: absolute;
+        bottom: -2px;
+        right: -2px;
+        background: #10b981;
+        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        border: 2px solid #4c3baf;
+        animation: wavePulse 0.8s infinite;
+      }
+      .avatar.speaking .speak-wave { display: flex; }
+      @keyframes wavePulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.2); }
+      }
+      .participant.speaking {
+        background: rgba(16,185,129,0.2);
+        border: 1px solid rgba(16,185,129,0.4);
+      }
+      .participant { border: 1px solid transparent; }
+
+
+
+
     .p-info { flex: 1; min-width: 0; }
     .p-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 6px; }
     .p-badge { font-size: 10px; background: #fbbf24; color: #000; padding: 2px 6px; border-radius: 6px; font-weight: 700; }
@@ -497,6 +536,31 @@
       try {
         client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 
+
+                // Active la détection des volumes (qui parle)
+        client.enableAudioVolumeIndicator();
+
+        client.on("volume-indicator", (volumes) => {
+          // Reset speaking pour tout le monde
+          let changed = false;
+          participants.forEach((p, uid) => {
+            const wasSpeaking = p.speaking;
+            p.speaking = false;
+            if (wasSpeaking) changed = true;
+          });
+          // Marquer ceux qui parlent (volume > 5)
+          volumes.forEach(v => {
+            const uid = v.uid === 0 ? myUid : v.uid; // 0 = moi
+            const p = participants.get(uid);
+            if (p && v.level > 5 && !p.muted) {
+              p.speaking = true;
+              changed = true;
+            }
+          });
+          if (changed) renderParticipants();
+        });
+
+
         // Events AVANT join
         client.on("user-published", async (user, mediaType) => {
           await client.subscribe(user, mediaType);
@@ -537,11 +601,11 @@
 
         await client.join(APP_ID, channel, null, myUid);
 
-        // Admin = premier arrivé (aucun autre user)
+        // Admin UNIQUEMENT si je suis vraiment seul (aucun user distant)
+        // Sinon j'attends de savoir qui est admin via les messages de présence
         isAdmin = client.remoteUsers.length === 0;
         adminUid = isAdmin ? myUid : null;
-
-        participants.set(myUid, { pseudo: myPseudo, muted: false, isAdmin });
+        participants.set(myUid, { pseudo: myPseudo, muted: false, isAdmin, speaking: false });
 
         localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
           encoderConfig: "speech_standard",
@@ -590,24 +654,46 @@
       sendMsg({ type: "presence", pseudo: myPseudo, isAdmin, muted: isMuted });
     }
 
-    function handleMessage(uid, msg) {
+        function handleMessage(uid, msg) {
       if (msg.type === "presence") {
         const p = participants.get(uid) || {};
         p.pseudo = msg.pseudo || "Invité";
         p.isAdmin = !!msg.isAdmin;
         p.muted = !!msg.muted;
+        p.speaking = p.speaking || false;
         participants.set(uid, p);
+
+        // 🔧 FIX : si quelqu'un d'autre est déjà admin et que moi aussi, je perds mon statut
+        // (sauf si mon uid est plus petit = je suis arrivé avant)
+        if (msg.isAdmin && isAdmin && uid !== myUid) {
+          if (uid < myUid) {
+            // L'autre est arrivé avant moi → il reste admin, je perds mon statut
+            isAdmin = false;
+            const me = participants.get(myUid);
+            if (me) { me.isAdmin = false; participants.set(myUid, me); }
+            adminUid = uid;
+            toast("ℹ️ " + p.pseudo + " est l'administrateur");
+            sendPresence();
+          }
+        }
         if (msg.isAdmin) adminUid = uid;
         renderParticipants();
       } else if (msg.type === "mute-request" && msg.target === myUid) {
-        // Admin demande à me muter
         if (!isMuted) toggleMute();
         toast("🔇 L'admin a coupé ton micro");
       } else if (msg.type === "kick" && msg.target === myUid) {
         toast("🚪 Tu as été expulsé par l'admin");
         setTimeout(leaveChannel, 1000);
+      } else if (msg.type === "promote" && msg.target === myUid) {
+        isAdmin = true;
+        const me = participants.get(myUid);
+        if (me) { me.isAdmin = true; participants.set(myUid, me); }
+        sendPresence();
+        toast("👑 Tu es maintenant administrateur");
+        renderParticipants();
       }
     }
+
 
     // ========== PARTICIPANTS UI ==========
     function renderParticipants() {
@@ -626,22 +712,28 @@
 
       sorted.forEach(([uid, p]) => {
         const el = document.createElement("div");
-        el.className = "participant";
+        el.className = "participant" + (p.speaking ? " speaking" : "");
         const isMe = uid === myUid;
         const canAct = isAdmin && !isMe;
 
+        
+        // ...
         el.innerHTML = `
-          <div class="avatar" style="background:${avatarColor(uid)}">${initials(p.pseudo)}</div>
+          <div class="avatar ${p.speaking ? 'speaking' : ''}" style="background:${avatarColor(uid)}">
+            ${initials(p.pseudo)}
+            <span class="speak-wave">🔊</span>
+          </div>
           <div class="p-info">
             <div class="p-name">
               ${p.pseudo}
               ${isMe ? '<span class="p-badge you">Toi</span>' : ''}
               ${p.isAdmin ? '<span class="p-badge">👑 Admin</span>' : ''}
             </div>
-            <div class="p-state">${p.muted ? '🔇 Micro coupé' : '🎤 Actif'}</div>
+            <div class="p-state">${p.muted ? '🔇 Micro coupé' : (p.speaking ? '🗣️ Parle...' : '🎤 Actif')}</div>
           </div>
           ${canAct ? `<div class="p-actions"><button class="icon-btn danger" data-uid="${uid}">⋯</button></div>` : ''}
         `;
+
 
         if (canAct) {
           el.querySelector(".icon-btn").onclick = () => openAdminModal(uid, p.pseudo);
