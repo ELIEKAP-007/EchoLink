@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>EchoLink - Appel VoIP</title>
+</head>
+<body>
+  <h2>📞 EchoLink</h2>
+
+  <div id="login-view">
+    <h3>Rejoindre un canal</h3>
+    <input id="channel" placeholder="Nom du canal" autocomplete="off" />
+    <button id="join-btn">➕ Créer / Rejoindre</button>
+
+    <h3>🟢 Canaux suggérés</h3>
+    <div id="channel-list"></div>
+    <button id="refresh-btn">🔄 Rafraîchir</button>
+  </div>
+
+  <div id="call-view" style="display:none;">
+    <h3>📡 Canal : <span id="current-channel"></span></h3>
+    <p>👤 Mon ID : <span id="my-uid"></span></p>
+
+    <hr>
+    <h3>🎤 Mon Micro</h3>
+    <div id="mic-view">
+      <p>État : <span id="mic-status">Inactif</span></p>
+      <p>Niveau : <span id="mic-level">0</span>%</p>
+      <button id="mute-btn">🔇 Couper le micro</button>
+    </div>
+
+    <hr>
+    <h3>🔊 Haut-parleur (Participants)</h3>
+    <div id="speaker-view">
+      <p>Participants connectés : <span id="user-count">0</span></p>
+      <ul id="remote-users"></ul>
+    </div>
+
+    <hr>
+    <button id="leave-btn">❌ Quitter l'appel</button>
+  </div>
+
+  <div id="log"></div>
+
+  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+  <script>
+    const APP_ID = "2ef61d6f97b14e4da482afe940591580";
+
+    // Canaux suggérés (tu peux modifier cette liste)
+    const SUGGESTED_CHANNELS = ["salon", "famille", "travail", "amis", "test"];
+
+    let client = null;
+    let localAudioTrack = null;
+    let isMuted = false;
+    let currentChannel = "";
+    const uid = Math.floor(Math.random() * 1000000);
+
+    const loginView = document.getElementById("login-view");
+    const callView = document.getElementById("call-view");
+    const channelInput = document.getElementById("channel");
+    const joinBtn = document.getElementById("join-btn");
+    const leaveBtn = document.getElementById("leave-btn");
+    const muteBtn = document.getElementById("mute-btn");
+    const refreshBtn = document.getElementById("refresh-btn");
+    const channelList = document.getElementById("channel-list");
+    const remoteUsersList = document.getElementById("remote-users");
+    const userCount = document.getElementById("user-count");
+    const micStatus = document.getElementById("mic-status");
+    const micLevel = document.getElementById("mic-level");
+    const logDiv = document.getElementById("log");
+
+    function log(msg) {
+      console.log(msg);
+      const p = document.createElement("p");
+      p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logDiv.prepend(p);
+      // Limite les logs
+      while (logDiv.children.length > 10) logDiv.removeChild(logDiv.lastChild);
+    }
+
+    // Afficher les canaux suggérés
+    function renderChannels() {
+      channelList.innerHTML = "";
+      SUGGESTED_CHANNELS.forEach(ch => {
+        const btn = document.createElement("button");
+        btn.textContent = `📢 ${ch}`;
+        btn.onclick = () => {
+          channelInput.value = ch;
+          joinChannel(ch);
+        };
+        channelList.appendChild(btn);
+        channelList.appendChild(document.createElement("br"));
+      });
+    }
+
+    // Mise à jour liste participants
+    function updateRemoteUsers() {
+      const users = client.remoteUsers;
+      userCount.textContent = users.length;
+      remoteUsersList.innerHTML = "";
+      users.forEach(u => {
+        const li = document.createElement("li");
+        li.textContent = `🔊 Utilisateur ${u.uid} ${u.audioTrack ? "(audio actif)" : "(silencieux)"}`;
+        remoteUsersList.appendChild(li);
+      });
+    }
+
+    async function joinChannel(channelName) {
+      if (!channelName || channelName.trim() === "") {
+        alert("Entre un nom de canal valide");
+        return;
+      }
+
+      try {
+        // Créer le client avec bonne config
+        client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+
+        // Événements AVANT le join (important !)
+        client.on("user-published", async (user, mediaType) => {
+          await client.subscribe(user, mediaType);
+          log(`✅ Abonné à ${user.uid}`);
+          if (mediaType === "audio") {
+            user.audioTrack.play();
+            log(`🔊 Lecture audio de ${user.uid}`);
+          }
+          updateRemoteUsers();
+        });
+
+        client.on("user-unpublished", (user) => {
+          log(`🔇 ${user.uid} a arrêté`);
+          updateRemoteUsers();
+        });
+
+        client.on("user-left", (user) => {
+          log(`👋 ${user.uid} a quitté`);
+          updateRemoteUsers();
+        });
+
+        client.on("user-joined", (user) => {
+          log(`👤 ${user.uid} a rejoint`);
+          updateRemoteUsers();
+        });
+
+        log("🔄 Connexion au canal...");
+        await client.join(APP_ID, channelName, null, uid);
+        log(`✅ Connecté au canal : ${channelName}`);
+
+        // Créer la piste micro avec AEC/ANS/AGC activés (ESSENTIEL pour full-duplex)
+        localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+          encoderConfig: "speech_standard",
+          AEC: true,   // Annulation d'écho (micro ne capte pas le HP)
+          ANS: true,   // Réduction de bruit
+          AGC: true    // Contrôle auto du gain
+        });
+
+        await client.publish([localAudioTrack]);
+        log("🎤 Micro publié avec AEC/ANS/AGC");
+        micStatus.textContent = "Actif ✅";
+
+        // S'abonner aux utilisateurs déjà présents
+        for (let user of client.remoteUsers) {
+          await client.subscribe(user, "audio");
+          if (user.audioTrack) user.audioTrack.play();
+          log(`🔊 Abonné à ${user.uid} (existant)`);
+        }
+        updateRemoteUsers();
+
+        // Niveau du micro (feedback visuel)
+        setInterval(() => {
+          if (localAudioTrack && !isMuted) {
+            const level = Math.round(localAudioTrack.getVolumeLevel() * 100);
+            micLevel.textContent = level;
+          }
+        }, 300);
+
+        // Basculer vers vue appel
+        currentChannel = channelName;
+        document.getElementById("current-channel").textContent = channelName;
+        document.getElementById("my-uid").textContent = uid;
+        loginView.style.display = "none";
+        callView.style.display = "block";
+
+      } catch (err) {
+        log(`❌ Erreur : ${err.message}`);
+        alert("Erreur : " + err.message + "\n\nVérifie que tu as autorisé le micro.");
+        await leaveChannel();
+      }
+    }
+
+    async function leaveChannel() {
+      try {
+        if (localAudioTrack) {
+          localAudioTrack.stop();
+          localAudioTrack.close();
+          localAudioTrack = null;
+        }
+        if (client) {
+          await client.leave();
+          client = null;
+        }
+        log("👋 Déconnecté");
+      } catch (e) {
+        log("Erreur leave: " + e.message);
+      }
+
+      loginView.style.display = "block";
+      callView.style.display = "none";
+      micStatus.textContent = "Inactif";
+      micLevel.textContent = "0";
+      isMuted = false;
+      muteBtn.textContent = "🔇 Couper le micro";
+    }
+
+    // Boutons
+    joinBtn.onclick = () => joinChannel(channelInput.value.trim());
+    leaveBtn.onclick = leaveChannel;
+    refreshBtn.onclick = renderChannels;
+
+    muteBtn.onclick = async () => {
+      if (!localAudioTrack) return;
+      isMuted = !isMuted;
+      await localAudioTrack.setMuted(isMuted);
+      muteBtn.textContent = isMuted ? "🎤 Réactiver le micro" : "🔇 Couper le micro";
+      micStatus.textContent = isMuted ? "Muet 🔇" : "Actif ✅";
+    };
+
+    // Init
+    renderChannels();
+
+    // Nettoyage à la fermeture
+    window.addEventListener("beforeunload", leaveChannel);
+  </script>
+</body>
+</html>
