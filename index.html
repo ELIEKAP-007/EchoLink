@@ -2,235 +2,733 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>EchoLink - Appel VoIP</title>
+  <meta name="theme-color" content="#6366f1">
+  <title>EchoLink</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .app {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 500px;
+      width: 100%;
+      margin: 0 auto;
+      position: relative;
+      overflow: hidden;
+    }
+    .view {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      padding: 24px 20px;
+      overflow-y: auto;
+      animation: fadeIn 0.3s ease;
+    }
+    .view.active { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+      padding-top: 20px;
+    }
+    .logo {
+      font-size: 48px;
+      margin-bottom: 8px;
+    }
+    .app-name {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .app-sub {
+      font-size: 14px;
+      opacity: 0.8;
+      margin-top: 4px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 20px;
+      padding: 20px;
+      margin-bottom: 16px;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.8;
+      margin-bottom: 12px;
+    }
+
+    .input {
+      width: 100%;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 16px;
+      color: #fff;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .input::placeholder { color: rgba(255,255,255,0.6); }
+    .input:focus { background: rgba(255,255,255,0.3); border-color: #fff; }
+
+    .btn {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: #fff;
+      color: #6366f1;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .btn-ghost {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .btn-danger {
+      background: #ef4444;
+      color: #fff;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .channel-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .channel-chip {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 14px;
+      padding: 16px 12px;
+      text-align: center;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .channel-chip:active { transform: scale(0.95); background: rgba(255,255,255,0.3); }
+    .channel-chip .ico { font-size: 22px; display: block; margin-bottom: 6px; }
+
+    /* Call view */
+    .call-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .call-info { flex: 1; }
+    .call-channel { font-size: 20px; font-weight: 700; }
+    .call-status { font-size: 13px; opacity: 0.8; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+    .status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .mic-visual {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      margin: 20px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 56px;
+      position: relative;
+      transition: all 0.1s;
+    }
+    .mic-visual.active {
+      background: rgba(16,185,129,0.3);
+      box-shadow: 0 0 0 0 rgba(16,185,129,0.6);
+      animation: ripple 1.5s infinite;
+    }
+    .mic-visual.muted { background: rgba(239,68,68,0.3); }
+    @keyframes ripple {
+      0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.6); }
+      100% { box-shadow: 0 0 0 30px rgba(16,185,129,0); }
+    }
+
+    .mic-level-bar {
+      height: 6px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 10px 0 20px;
+    }
+    .mic-level-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #fbbf24, #ef4444);
+      width: 0%;
+      transition: width 0.1s;
+      border-radius: 3px;
+    }
+
+    .participants-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .participant {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 14px;
+      transition: all 0.2s;
+    }
+    .avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #fbbf24, #f97316);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .p-info { flex: 1; min-width: 0; }
+    .p-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 6px; }
+    .p-badge { font-size: 10px; background: #fbbf24; color: #000; padding: 2px 6px; border-radius: 6px; font-weight: 700; }
+    .p-badge.you { background: #10b981; color: #fff; }
+    .p-state { font-size: 12px; opacity: 0.7; }
+    .p-actions { display: flex; gap: 6px; }
+    .icon-btn {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      border: none;
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon-btn:active { transform: scale(0.9); }
+    .icon-btn.danger { background: rgba(239,68,68,0.3); }
+
+    .call-actions {
+      display: flex;
+      gap: 12px;
+      padding: 16px 20px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 20px 20px 0 0;
+      margin: 0 -20px -24px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    }
+    .action-btn {
+      flex: 1;
+      padding: 14px;
+      border: none;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-family: inherit;
+      color: #fff;
+    }
+    .action-btn .ico { font-size: 22px; }
+    .action-btn.mute { background: rgba(255,255,255,0.2); }
+    .action-btn.mute.active { background: #ef4444; }
+    .action-btn.leave { background: #ef4444; }
+
+    .toast {
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(0,0,0,0.85);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 30px;
+      font-size: 14px;
+      z-index: 1000;
+      transition: transform 0.3s;
+      max-width: 90%;
+      text-align: center;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 999;
+    }
+    .modal.show { display: flex; }
+    .modal-content {
+      background: #fff;
+      color: #1f2937;
+      width: 100%;
+      max-width: 500px;
+      border-radius: 20px 20px 0 0;
+      padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+      animation: slideUp 0.25s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+    .modal-btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .modal-btn.danger { background: #ef4444; color: #fff; }
+    .modal-btn.cancel { background: #e5e7eb; color: #1f2937; }
+
+    @media (min-width: 600px) {
+      body { padding: 20px; }
+      .app { border-radius: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-height: 900px; }
+    }
+  </style>
 </head>
 <body>
-  <h2>📞 EchoLink</h2>
+  <div class="app">
 
-  <div id="login-view">
-    <h3>Rejoindre un canal</h3>
-    <input id="channel" placeholder="Nom du canal" autocomplete="off" />
-    <button id="join-btn">➕ Créer / Rejoindre</button>
+    <!-- LOGIN VIEW -->
+    <div id="login-view" class="view active">
+      <div class="header">
+        <div class="logo">📞</div>
+        <div class="app-name">EchoLink</div>
+        <div class="app-sub">Appels vocaux en temps réel</div>
+      </div>
 
-    <h3>🟢 Canaux suggérés</h3>
-    <div id="channel-list"></div>
-    <button id="refresh-btn">🔄 Rafraîchir</button>
-  </div>
+      <div class="card">
+        <div class="card-title">👤 Ton pseudo</div>
+        <input id="pseudo" class="input" placeholder="Ex: Elie" maxlength="20" autocomplete="off" />
+      </div>
 
-  <div id="call-view" style="display:none;">
-    <h3>📡 Canal : <span id="current-channel"></span></h3>
-    <p>👤 Mon ID : <span id="my-uid"></span></p>
+      <div class="card">
+        <div class="card-title">📡 Nom du canal</div>
+        <input id="channel" class="input" placeholder="Ex: famille" maxlength="20" autocomplete="off" />
+        <div style="height:12px"></div>
+        <button id="join-btn" class="btn btn-primary">Rejoindre l'appel</button>
+      </div>
 
-    <hr>
-    <h3>🎤 Mon Micro</h3>
-    <div id="mic-view">
-      <p>État : <span id="mic-status">Inactif</span></p>
-      <p>Niveau : <span id="mic-level">0</span>%</p>
-      <button id="mute-btn">🔇 Couper le micro</button>
+      <div class="card">
+        <div class="card-title">🟢 Canaux suggérés</div>
+        <div id="channel-list" class="channel-grid"></div>
+      </div>
     </div>
 
-    <hr>
-    <h3>🔊 Haut-parleur (Participants)</h3>
-    <div id="speaker-view">
-      <p>Participants connectés : <span id="user-count">0</span></p>
-      <ul id="remote-users"></ul>
+    <!-- CALL VIEW -->
+    <div id="call-view" class="view">
+      <div class="call-header">
+        <div class="call-info">
+          <div class="call-channel" id="current-channel">-</div>
+          <div class="call-status">
+            <span class="status-dot"></span>
+            <span id="participants-count">1</span> participant(s)
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="text-align:center">
+        <div id="mic-visual" class="mic-visual">🎤</div>
+        <div id="mic-status" style="font-weight:600;margin-bottom:8px">Micro actif</div>
+        <div class="mic-level-bar">
+          <div id="mic-level-fill" class="mic-level-fill"></div>
+        </div>
+      </div>
+
+      <div class="card" style="flex:1;overflow-y:auto">
+        <div class="card-title">👥 Participants</div>
+        <div id="participants-list" class="participants-list"></div>
+      </div>
+
+      <div class="call-actions">
+        <button id="mute-btn" class="action-btn mute">
+          <span class="ico">🎤</span>
+          <span>Muet</span>
+        </button>
+        <button id="leave-btn" class="action-btn leave">
+          <span class="ico">📞</span>
+          <span>Quitter</span>
+        </button>
+      </div>
     </div>
 
-    <hr>
-    <button id="leave-btn">❌ Quitter l'appel</button>
   </div>
 
-  <div id="log"></div>
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Modal actions admin -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-title" id="modal-title">Actions</div>
+      <button id="modal-mute" class="modal-btn danger">🔇 Couper le micro</button>
+      <button id="modal-kick" class="modal-btn danger">🚪 Expulser du canal</button>
+      <button id="modal-cancel" class="modal-btn cancel">Annuler</button>
+    </div>
+  </div>
 
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
   <script>
+    // ========== CONFIG ==========
     const APP_ID = "2ef61d6f97b14e4da482afe940591580";
+    const SUGGESTED_CHANNELS = ["salon", "famille", "travail", "amis"];
 
-    // Canaux suggérés (tu peux modifier cette liste)
-    const SUGGESTED_CHANNELS = ["salon", "famille", "travail", "amis", "test"];
-
+    // ========== STATE ==========
     let client = null;
     let localAudioTrack = null;
-    let isMuted = false;
+    let myUid = null;
+    let myPseudo = "";
     let currentChannel = "";
-    const uid = Math.floor(Math.random() * 1000000);
+    let isMuted = false;
+    let isAdmin = false;
+    let adminUid = null;
+    let participants = new Map(); // uid -> { pseudo, muted, isAdmin }
+    let levelInterval = null;
+    let targetUid = null; // pour les actions admin
 
-    const loginView = document.getElementById("login-view");
-    const callView = document.getElementById("call-view");
-    const channelInput = document.getElementById("channel");
-    const joinBtn = document.getElementById("join-btn");
-    const leaveBtn = document.getElementById("leave-btn");
-    const muteBtn = document.getElementById("mute-btn");
-    const refreshBtn = document.getElementById("refresh-btn");
-    const channelList = document.getElementById("channel-list");
-    const remoteUsersList = document.getElementById("remote-users");
-    const userCount = document.getElementById("user-count");
-    const micStatus = document.getElementById("mic-status");
-    const micLevel = document.getElementById("mic-level");
-    const logDiv = document.getElementById("log");
+    // ========== DOM ==========
+    const $ = id => document.getElementById(id);
+    const loginView = $("login-view");
+    const callView = $("call-view");
 
-    function log(msg) {
-      console.log(msg);
-      const p = document.createElement("p");
-      p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      logDiv.prepend(p);
-      // Limite les logs
-      while (logDiv.children.length > 10) logDiv.removeChild(logDiv.lastChild);
+    // ========== UTILS ==========
+    function toast(msg, duration = 2500) {
+      const t = $("toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => t.classList.remove("show"), duration);
     }
 
-    // Afficher les canaux suggérés
+    function switchView(view) {
+      loginView.classList.remove("active");
+      callView.classList.remove("active");
+      view.classList.add("active");
+    }
+
+    function initials(name) {
+      return (name || "?").slice(0, 2).toUpperCase();
+    }
+
+    function avatarColor(uid) {
+      const colors = [
+        "linear-gradient(135deg,#fbbf24,#f97316)",
+        "linear-gradient(135deg,#10b981,#059669)",
+        "linear-gradient(135deg,#3b82f6,#1d4ed8)",
+        "linear-gradient(135deg,#ec4899,#be185d)",
+        "linear-gradient(135deg,#8b5cf6,#6d28d9)",
+      ];
+      return colors[Math.abs(uid) % colors.length];
+    }
+
+    // ========== CHANNEL SUGGESTIONS ==========
     function renderChannels() {
-      channelList.innerHTML = "";
+      const list = $("channel-list");
+      list.innerHTML = "";
       SUGGESTED_CHANNELS.forEach(ch => {
-        const btn = document.createElement("button");
-        btn.textContent = `📢 ${ch}`;
-        btn.onclick = () => {
-          channelInput.value = ch;
-          joinChannel(ch);
+        const el = document.createElement("div");
+        el.className = "channel-chip";
+        el.innerHTML = `<span class="ico">💬</span>${ch}`;
+        el.onclick = () => {
+          $("channel").value = ch;
+          joinChannel();
         };
-        channelList.appendChild(btn);
-        channelList.appendChild(document.createElement("br"));
+        list.appendChild(el);
       });
     }
 
-    // Mise à jour liste participants
-    function updateRemoteUsers() {
-      const users = client.remoteUsers;
-      userCount.textContent = users.length;
-      remoteUsersList.innerHTML = "";
-      users.forEach(u => {
-        const li = document.createElement("li");
-        li.textContent = `🔊 Utilisateur ${u.uid} ${u.audioTrack ? "(audio actif)" : "(silencieux)"}`;
-        remoteUsersList.appendChild(li);
-      });
-    }
+    // ========== JOIN ==========
+    async function joinChannel() {
+      const pseudo = $("pseudo").value.trim();
+      const channel = $("channel").value.trim();
 
-    async function joinChannel(channelName) {
-      if (!channelName || channelName.trim() === "") {
-        alert("Entre un nom de canal valide");
-        return;
-      }
+      if (!pseudo) return toast("⚠️ Entre ton pseudo");
+      if (!channel) return toast("⚠️ Entre un nom de canal");
+      if (!/^[a-zA-Z0-9_-]+$/.test(channel)) return toast("⚠️ Canal invalide (lettres/chiffres)");
+
+      myPseudo = pseudo;
+      currentChannel = channel;
+      myUid = Math.floor(Math.random() * 1000000);
+
+      $("join-btn").disabled = true;
+      toast("🔄 Connexion...");
 
       try {
-        // Créer le client avec bonne config
         client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 
-        // Événements AVANT le join (important !)
+        // Events AVANT join
         client.on("user-published", async (user, mediaType) => {
           await client.subscribe(user, mediaType);
-          log(`✅ Abonné à ${user.uid}`);
-          if (mediaType === "audio") {
-            user.audioTrack.play();
-            log(`🔊 Lecture audio de ${user.uid}`);
+          if (mediaType === "audio") user.audioTrack.play();
+          if (!participants.has(user.uid)) {
+            participants.set(user.uid, { pseudo: "Invité", muted: false, isAdmin: false });
           }
-          updateRemoteUsers();
+          renderParticipants();
         });
 
         client.on("user-unpublished", (user) => {
-          log(`🔇 ${user.uid} a arrêté`);
-          updateRemoteUsers();
-        });
-
-        client.on("user-left", (user) => {
-          log(`👋 ${user.uid} a quitté`);
-          updateRemoteUsers();
+          const p = participants.get(user.uid);
+          if (p) { p.muted = true; renderParticipants(); }
         });
 
         client.on("user-joined", (user) => {
-          log(`👤 ${user.uid} a rejoint`);
-          updateRemoteUsers();
+          if (!participants.has(user.uid)) {
+            participants.set(user.uid, { pseudo: "Invité", muted: false, isAdmin: false });
+            renderParticipants();
+          }
+          // Envoyer mon info au nouveau
+          setTimeout(() => sendPresence(), 500);
         });
 
-        log("🔄 Connexion au canal...");
-        await client.join(APP_ID, channelName, null, uid);
-        log(`✅ Connecté au canal : ${channelName}`);
+        client.on("user-left", (user) => {
+          participants.delete(user.uid);
+          renderParticipants();
+          toast(`👋 Un participant a quitté`);
+        });
 
-        // Créer la piste micro avec AEC/ANS/AGC activés (ESSENTIEL pour full-duplex)
+        // Messages via stream-message
+        client.on("stream-message", (uid, data) => {
+          try {
+            const msg = JSON.parse(new TextDecoder().decode(data));
+            handleMessage(uid, msg);
+          } catch(e) { console.warn(e); }
+        });
+
+        await client.join(APP_ID, channel, null, myUid);
+
+        // Admin = premier arrivé (aucun autre user)
+        isAdmin = client.remoteUsers.length === 0;
+        adminUid = isAdmin ? myUid : null;
+
+        participants.set(myUid, { pseudo: myPseudo, muted: false, isAdmin });
+
         localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
           encoderConfig: "speech_standard",
-          AEC: true,   // Annulation d'écho (micro ne capte pas le HP)
-          ANS: true,   // Réduction de bruit
-          AGC: true    // Contrôle auto du gain
+          AEC: true, ANS: true, AGC: true
         });
-
         await client.publish([localAudioTrack]);
-        log("🎤 Micro publié avec AEC/ANS/AGC");
-        micStatus.textContent = "Actif ✅";
 
-        // S'abonner aux utilisateurs déjà présents
+        // S'abonner aux users déjà présents
         for (let user of client.remoteUsers) {
-          await client.subscribe(user, "audio");
-          if (user.audioTrack) user.audioTrack.play();
-          log(`🔊 Abonné à ${user.uid} (existant)`);
-        }
-        updateRemoteUsers();
-
-        // Niveau du micro (feedback visuel)
-        setInterval(() => {
-          if (localAudioTrack && !isMuted) {
-            const level = Math.round(localAudioTrack.getVolumeLevel() * 100);
-            micLevel.textContent = level;
+          if (!participants.has(user.uid)) {
+            participants.set(user.uid, { pseudo: "Invité", muted: false, isAdmin: false });
           }
-        }, 300);
-
-        // Basculer vers vue appel
-        currentChannel = channelName;
-        document.getElementById("current-channel").textContent = channelName;
-        document.getElementById("my-uid").textContent = uid;
-        loginView.style.display = "none";
-        callView.style.display = "block";
-
-      } catch (err) {
-        log(`❌ Erreur : ${err.message}`);
-        alert("Erreur : " + err.message + "\n\nVérifie que tu as autorisé le micro.");
-        await leaveChannel();
-      }
-    }
-
-    async function leaveChannel() {
-      try {
-        if (localAudioTrack) {
-          localAudioTrack.stop();
-          localAudioTrack.close();
-          localAudioTrack = null;
+          if (user.hasAudio) {
+            await client.subscribe(user, "audio");
+            user.audioTrack.play();
+          }
         }
-        if (client) {
-          await client.leave();
-          client = null;
-        }
-        log("👋 Déconnecté");
+
+        // Envoyer ma présence
+        sendPresence();
+        setTimeout(() => sendPresence(), 1000);
+
+        // UI
+        $("current-channel").textContent = channel;
+        switchView(callView);
+        renderParticipants();
+        startMicLevel();
+
+        toast(isAdmin ? "👑 Tu es administrateur" : "✅ Connecté");
       } catch (e) {
-        log("Erreur leave: " + e.message);
+        console.error(e);
+        toast("❌ " + (e.message || "Erreur de connexion"));
+        $("join-btn").disabled = false;
       }
-
-      loginView.style.display = "block";
-      callView.style.display = "none";
-      micStatus.textContent = "Inactif";
-      micLevel.textContent = "0";
-      isMuted = false;
-      muteBtn.textContent = "🔇 Couper le micro";
     }
 
-    // Boutons
-    joinBtn.onclick = () => joinChannel(channelInput.value.trim());
-    leaveBtn.onclick = leaveChannel;
-    refreshBtn.onclick = renderChannels;
+    // ========== MESSAGING ==========
+    function sendMsg(msg) {
+      try {
+        const data = new TextEncoder().encode(JSON.stringify(msg));
+        client.sendStreamMessage(data);
+      } catch(e) { console.warn("Send failed:", e); }
+    }
 
-    muteBtn.onclick = async () => {
+    function sendPresence() {
+      sendMsg({ type: "presence", pseudo: myPseudo, isAdmin, muted: isMuted });
+    }
+
+    function handleMessage(uid, msg) {
+      if (msg.type === "presence") {
+        const p = participants.get(uid) || {};
+        p.pseudo = msg.pseudo || "Invité";
+        p.isAdmin = !!msg.isAdmin;
+        p.muted = !!msg.muted;
+        participants.set(uid, p);
+        if (msg.isAdmin) adminUid = uid;
+        renderParticipants();
+      } else if (msg.type === "mute-request" && msg.target === myUid) {
+        // Admin demande à me muter
+        if (!isMuted) toggleMute();
+        toast("🔇 L'admin a coupé ton micro");
+      } else if (msg.type === "kick" && msg.target === myUid) {
+        toast("🚪 Tu as été expulsé par l'admin");
+        setTimeout(leaveChannel, 1000);
+      }
+    }
+
+    // ========== PARTICIPANTS UI ==========
+    function renderParticipants() {
+      const list = $("participants-list");
+      list.innerHTML = "";
+      $("participants-count").textContent = participants.size;
+
+      // Trier : moi d'abord, puis admin, puis autres
+      const sorted = [...participants.entries()].sort((a,b) => {
+        if (a[0] === myUid) return -1;
+        if (b[0] === myUid) return 1;
+        if (a[1].isAdmin) return -1;
+        if (b[1].isAdmin) return 1;
+        return 0;
+      });
+
+      sorted.forEach(([uid, p]) => {
+        const el = document.createElement("div");
+        el.className = "participant";
+        const isMe = uid === myUid;
+        const canAct = isAdmin && !isMe;
+
+        el.innerHTML = `
+          <div class="avatar" style="background:${avatarColor(uid)}">${initials(p.pseudo)}</div>
+          <div class="p-info">
+            <div class="p-name">
+              ${p.pseudo}
+              ${isMe ? '<span class="p-badge you">Toi</span>' : ''}
+              ${p.isAdmin ? '<span class="p-badge">👑 Admin</span>' : ''}
+            </div>
+            <div class="p-state">${p.muted ? '🔇 Micro coupé' : '🎤 Actif'}</div>
+          </div>
+          ${canAct ? `<div class="p-actions"><button class="icon-btn danger" data-uid="${uid}">⋯</button></div>` : ''}
+        `;
+
+        if (canAct) {
+          el.querySelector(".icon-btn").onclick = () => openAdminModal(uid, p.pseudo);
+        }
+        list.appendChild(el);
+      });
+    }
+
+    // ========== ADMIN ACTIONS ==========
+    function openAdminModal(uid, pseudo) {
+      targetUid = uid;
+      $("modal-title").textContent = `Actions sur ${pseudo}`;
+      $("modal").classList.add("show");
+    }
+
+    $("modal-cancel").onclick = () => $("modal").classList.remove("show");
+    $("modal-mute").onclick = () => {
+      sendMsg({ type: "mute-request", target: targetUid });
+      toast("🔇 Demande envoyée");
+      $("modal").classList.remove("show");
+    };
+    $("modal-kick").onclick = () => {
+      sendMsg({ type: "kick", target: targetUid });
+      toast("🚪 Utilisateur expulsé");
+      $("modal").classList.remove("show");
+    };
+
+    // ========== MUTE ==========
+    async function toggleMute() {
       if (!localAudioTrack) return;
       isMuted = !isMuted;
       await localAudioTrack.setMuted(isMuted);
-      muteBtn.textContent = isMuted ? "🎤 Réactiver le micro" : "🔇 Couper le micro";
-      micStatus.textContent = isMuted ? "Muet 🔇" : "Actif ✅";
-    };
+      const btn = $("mute-btn");
+      btn.classList.toggle("active", isMuted);
+      btn.querySelector(".ico").textContent = isMuted ? "🔇" : "🎤";
+      btn.querySelector("span:last-child").textContent = isMuted ? "Muet" : "Actif";
+      $("mic-status").textContent = isMuted ? "Micro coupé" : "Micro actif";
+      $("mic-visual").classList.toggle("muted", isMuted);
+
+      const p = participants.get(myUid);
+      if (p) { p.muted = isMuted; participants.set(myUid, p); renderParticipants(); }
+      sendPresence();
+    }
+
+    // ========== MIC LEVEL ==========
+    function startMicLevel() {
+      if (levelInterval) clearInterval(levelInterval);
+      levelInterval = setInterval(() => {
+        if (!localAudioTrack) return;
+        const level = localAudioTrack.getVolumeLevel() * 100;
+        $("mic-level-fill").style.width = Math.min(100, level * 2) + "%";
+        const v = $("mic-visual");
+        if (!isMuted && level > 5) v.classList.add("active");
+        else v.classList.remove("active");
+      }, 100);
+    }
+
+    // ========== LEAVE ==========
+    async function leaveChannel() {
+      if (levelInterval) clearInterval(levelInterval);
+      try {
+        if (localAudioTrack) { localAudioTrack.stop(); localAudioTrack.close(); }
+        if (client) await client.leave();
+      } catch(e) {}
+      localAudioTrack = null;
+      client = null;
+      participants.clear();
+      isMuted = false;
+      isAdmin = false;
+      $("join-btn").disabled = false;
+      switchView(loginView);
+      toast("👋 Déconnecté");
+    }
+
+    // ========== EVENTS ==========
+    $("join-btn").onclick = joinChannel;
+    $("mute-btn").onclick = toggleMute;
+    $("leave-btn").onclick = leaveChannel;
 
     // Init
     renderChannels();
 
-    // Nettoyage à la fermeture
+    // Restore pseudo
+    const saved = localStorage.getItem("pseudo");
+    if (saved) $("pseudo").value = saved;
+    $("pseudo").addEventListener("change", e => localStorage.setItem("pseudo", e.target.value));
+
     window.addEventListener("beforeunload", leaveChannel);
   </script>
 </body>
